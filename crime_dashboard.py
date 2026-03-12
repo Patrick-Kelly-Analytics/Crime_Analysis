@@ -219,6 +219,7 @@ def _extract_year(fb):
 # TABLE BUILDERS (shared by both pages)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def _build_combined_table(data, months_active):
+    """Build data for the column-paired layout: each month has a 🏘️ and 🏥 sub-column."""
     def _pivot(is_hosp):
         sub = data[data["is_hospital"] == is_hosp]
         piv = sub.groupby(["Crime Type","Month"], observed=True)["Count"].sum().unstack(fill_value=0)
@@ -229,81 +230,149 @@ def _build_combined_table(data, months_active):
     all_types = sorted(set(piv_nh.index)|set(piv_h.index),
         key=lambda ct:(piv_nh.loc[ct,"Total"] if ct in piv_nh.index else 0)+(piv_h.loc[ct,"Total"] if ct in piv_h.index else 0),
         reverse=True)
-    cols = list(months_active)+["Total"]; rows = []
-    for ct in all_types:
-        nh_vals=[int(piv_nh.loc[ct,c]) if ct in piv_nh.index else 0 for c in cols]
-        h_vals =[int(piv_h.loc[ct,c])  if ct in piv_h.index  else 0 for c in cols]
-        rows.append({"label":f"<b>{ct}</b>","vals":[n+h for n,h in zip(nh_vals,h_vals)],"type":"crime_header"})
-        rows.append({"label":"   🏘️ Non-Hospital","vals":nh_vals,"type":"non_hospital"})
-        rows.append({"label":"   🏥 Hospital","vals":h_vals,"type":"hospital"})
-    nh_totals=[int(piv_nh[c].sum()) if c in piv_nh.columns else 0 for c in cols]
-    h_totals =[int(piv_h[c].sum())  if c in piv_h.columns  else 0 for c in cols]
-    rows.append({"label":"<b>TOTAL NON-HOSPITAL</b>","vals":nh_totals,"type":"total_nh"})
-    rows.append({"label":"<b>TOTAL HOSPITAL</b>","vals":h_totals,"type":"total_h"})
-    rows.append({"label":"<b>TOTAL ALL CRIMES</b>","vals":[n+h for n,h in zip(nh_totals,h_totals)],"type":"total_all"})
-    return rows, cols
+    return piv_nh, piv_h, all_types
 
-def _render_combined_table(rows, cols, months_active):
+def _render_combined_table(piv_nh, piv_h, all_types, months_active):
+    """
+    Render table with paired sub-columns per month:
+    Crime Type | Jan 🏘️ | Jan 🏥 | Feb 🏘️ | Feb 🏥 | … | Total 🏘️ | Total 🏥
+    """
     dark = _is_dark()
     if dark:
-        header_fill="#1e293b"; header_font="#e2e8f0"; crime_hdr_bg="#1a2332"; crime_hdr_font="#e2e8f0"
+        header_fill="#1e293b"; header_font="#e2e8f0"
         nh_bg_low="#0f172a"; nh_bg_high="#1e3a5f"; nh_font_low="#64748b"; nh_font_high="#93c5fd"
         h_bg_low="#0f1118"; h_bg_high="#2d1a1a"; h_font_low="#64748b"; h_font_high="#fca5a5"
         zero_bg="#0f1118"; zero_font="#374151"
-        total_nh_bg="#1e40af"; total_h_bg="#991b1b"; total_all_bg="#1e293b"
-        total_font="#ffffff"; line_color="#1e293b"; bg_color="#0e1117"; title_color="#e2e8f0"; label_def="#cbd5e1"
+        total_row_bg="#1e293b"; total_row_font="#ffffff"
+        line_color="#1e293b"; bg_color="#0e1117"; title_color="#e2e8f0"
+        label_bg="#0f172a"; label_font="#cbd5e1"
     else:
-        header_fill="#1e293b"; header_font="#ffffff"; crime_hdr_bg="#f1f5f9"; crime_hdr_font="#0f172a"
+        header_fill="#1e293b"; header_font="#ffffff"
         nh_bg_low="#ffffff"; nh_bg_high="#bfdbfe"; nh_font_low="#94a3b8"; nh_font_high="#1e3a5f"
         h_bg_low="#ffffff"; h_bg_high="#fecaca"; h_font_low="#94a3b8"; h_font_high="#7f1d1d"
         zero_bg="#ffffff"; zero_font="#d1d5db"
-        total_nh_bg="#2563eb"; total_h_bg="#dc2626"; total_all_bg="#0f172a"
-        total_font="#ffffff"; line_color="#e2e8f0"; bg_color="#ffffff"; title_color="#0f172a"; label_def="#334155"
-    nh_data_vals=[r["vals"][:-1] for r in rows if r["type"]=="non_hospital"]
-    nh_max=max((max(v) for v in nh_data_vals if v),default=1) or 1
-    h_data_vals=[r["vals"][:-1] for r in rows if r["type"]=="hospital"]
-    h_max=max((max(v) for v in h_data_vals if v),default=1) or 1
-    n_rows=len(rows); n_dc=len(cols)
-    lab_v,lab_f,lab_c=[],[],[]
-    for r in rows:
-        lab_v.append(r["label"]); t=r["type"]
-        if t=="crime_header": lab_f.append(crime_hdr_bg); lab_c.append(crime_hdr_font)
-        elif t=="total_nh": lab_f.append(total_nh_bg); lab_c.append(total_font)
-        elif t=="total_h": lab_f.append(total_h_bg); lab_c.append(total_font)
-        elif t=="total_all": lab_f.append(total_all_bg); lab_c.append(total_font)
-        else: lab_f.append(nh_bg_low if dark else "#fafbfc"); lab_c.append(label_def)
-    cv,cf,cc=[lab_v],[lab_f],[lab_c]
-    for ci,cn in enumerate(cols):
-        v,f,c=[],[],[]
-        is_tc=(cn=="Total")
-        for ri,r in enumerate(rows):
-            val=r["vals"][ci]; tp=r["type"]
-            if tp in("total_nh","total_h","total_all"):
-                v.append(f"<b>{val}</b>"); f.append({"total_nh":total_nh_bg,"total_h":total_h_bg,"total_all":total_all_bg}[tp]); c.append(total_font)
-            elif tp=="crime_header":
-                v.append(f"<b>{val}</b>" if val>0 else "–"); f.append(crime_hdr_bg); c.append(crime_hdr_font if val>0 else zero_font)
-            elif tp=="non_hospital":
-                if val==0: v.append("–"); f.append(zero_bg); c.append(zero_font)
+        total_row_bg="#0f172a"; total_row_font="#ffffff"
+        line_color="#e2e8f0"; bg_color="#ffffff"; title_color="#0f172a"
+        label_bg="#f9fafb"; label_font="#111827"
+
+    period_keys = list(months_active) + ["Total"]
+
+    # Max values for intensity scaling (excl Total column)
+    nh_month_vals = [int(piv_nh[m].sum()) for m in months_active if m in piv_nh.columns]
+    h_month_vals  = [int(piv_h[m].sum())  for m in months_active if m in piv_h.columns]
+    nh_max = max(max(nh_month_vals, default=1), 1)
+    h_max  = max(max(h_month_vals, default=1), 1)
+    # Per-cell max for finer intensity
+    nh_cell_max = max((piv_nh.reindex(columns=months_active, fill_value=0).iloc[:].values.max()), 1)
+    h_cell_max  = max((piv_h.reindex(columns=months_active, fill_value=0).iloc[:].values.max()), 1)
+
+    # Row labels: crime types + Sub-Totals
+    row_labels = list(all_types) + ["Sub-Totals"]
+    n_rows = len(row_labels)
+
+    # Build header: Crime Type | Jan 🏘️ | Jan 🏥 | Feb 🏘️ | Feb 🏥 | … | Total 🏘️ | Total 🏥
+    header_vals = ["<b>Crime Type</b>"]
+    for pk in period_keys:
+        header_vals.append(f"<b>{pk}</b> 🏘️")
+        header_vals.append(f"<b>{pk}</b> 🏥")
+    n_data_cols = len(period_keys) * 2
+
+    # Column widths
+    col_widths = [180] + [52] * n_data_cols
+
+    # Header fill colours: alternate blue/red tints for sub-columns
+    hdr_fills = [header_fill]
+    for _ in period_keys:
+        hdr_fills.append("#1e3a5f" if dark else "#1e40af")  # NH blue
+        hdr_fills.append("#3b1a1a" if dark else "#991b1b")  # H red
+    hdr_font_colors = [header_font]
+    for _ in period_keys:
+        hdr_font_colors.append("#bfdbfe" if dark else "#ffffff")
+        hdr_font_colors.append("#fecaca" if dark else "#ffffff")
+
+    # Build cell data column by column (Plotly table format)
+    # Column 0: labels
+    lab_v, lab_f, lab_c = [], [], []
+    for i, lbl in enumerate(row_labels):
+        is_total = (i == n_rows - 1)
+        lab_v.append(f"<b>{lbl}</b>" if is_total else lbl)
+        lab_f.append(total_row_bg if is_total else label_bg)
+        lab_c.append(total_row_font if is_total else label_font)
+
+    cell_values = [lab_v]
+    cell_fills  = [lab_f]
+    cell_fonts  = [lab_c]
+
+    for pk in period_keys:
+        is_total_col = (pk == "Total")
+        # NH column for this period
+        nh_v, nh_f, nh_c = [], [], []
+        # H column for this period
+        h_v, h_f, h_c = [], [], []
+
+        for i, ct in enumerate(row_labels):
+            is_total_row = (i == n_rows - 1)
+
+            if is_total_row:
+                # Sub-totals row
+                nh_val = int(piv_nh[pk].sum()) if pk in piv_nh.columns else 0
+                h_val  = int(piv_h[pk].sum())  if pk in piv_h.columns  else 0
+                nh_v.append(f"<b>{nh_val}</b>"); nh_f.append(total_row_bg); nh_c.append(total_row_font)
+                h_v.append(f"<b>{h_val}</b>");   h_f.append(total_row_bg);  h_c.append(total_row_font)
+            else:
+                # Crime type row
+                nh_val = int(piv_nh.loc[ct, pk]) if ct in piv_nh.index and pk in piv_nh.columns else 0
+                h_val  = int(piv_h.loc[ct, pk])  if ct in piv_h.index  and pk in piv_h.columns  else 0
+
+                # NH cell
+                if nh_val == 0:
+                    nh_v.append("–"); nh_f.append(zero_bg); nh_c.append(zero_font)
                 else:
-                    ref=max(nh_max,1) if not is_tc else max((r2["vals"][-1] for r2 in rows if r2["type"]=="non_hospital"),default=1) or 1
-                    i=min(val/ref,1.0); f.append(_lerp_hex(nh_bg_low,nh_bg_high,i)); c.append(_lerp_hex(nh_font_low,nh_font_high,i))
-                    v.append(f"<b>{val}</b>" if(i>0.4 or is_tc) else str(val))
-            elif tp=="hospital":
-                if val==0: v.append("–"); f.append(zero_bg); c.append(zero_font)
+                    ref = nh_cell_max if not is_total_col else max(piv_nh["Total"].max(), 1)
+                    intensity = min(nh_val / max(ref, 1), 1.0)
+                    nh_f.append(_lerp_hex(nh_bg_low, nh_bg_high, intensity))
+                    nh_c.append(_lerp_hex(nh_font_low, nh_font_high, intensity))
+                    nh_v.append(f"<b>{nh_val}</b>" if (intensity > 0.4 or is_total_col) else str(nh_val))
+
+                # H cell
+                if h_val == 0:
+                    h_v.append("–"); h_f.append(zero_bg); h_c.append(zero_font)
                 else:
-                    ref=max(h_max,1) if not is_tc else max((r2["vals"][-1] for r2 in rows if r2["type"]=="hospital"),default=1) or 1
-                    i=min(val/ref,1.0); f.append(_lerp_hex(h_bg_low,h_bg_high,i)); c.append(_lerp_hex(h_font_low,h_font_high,i))
-                    v.append(str(val))
-        cv.append(v); cf.append(f); cc.append(c)
-    fig=go.Figure(data=[go.Table(
-        columnwidth=[200]+[58]*n_dc,
-        header=dict(values=[f"<b>{c}</b>" for c in ["Crime Type"]+cols],fill_color=header_fill,
-            font=dict(color=header_font,size=12,family="DM Sans"),align=["left"]+["center"]*n_dc,height=36,line_color=line_color),
-        cells=dict(values=cv,fill_color=cf,font=dict(color=cc,size=12,family="JetBrains Mono"),
-            align=["left"]+["center"]*n_dc,height=30,line_color=line_color),
+                    ref = h_cell_max if not is_total_col else max(piv_h["Total"].max(), 1)
+                    intensity = min(h_val / max(ref, 1), 1.0)
+                    h_f.append(_lerp_hex(h_bg_low, h_bg_high, intensity))
+                    h_c.append(_lerp_hex(h_font_low, h_font_high, intensity))
+                    h_v.append(str(h_val))
+
+        cell_values.append(nh_v); cell_fills.append(nh_f); cell_fonts.append(nh_c)
+        cell_values.append(h_v);  cell_fills.append(h_f);  cell_fonts.append(h_c)
+
+    fig = go.Figure(data=[go.Table(
+        columnwidth=col_widths,
+        header=dict(
+            values=header_vals,
+            fill_color=[hdr_fills],
+            font=dict(color=[hdr_font_colors], size=11, family="DM Sans"),
+            align=["left"] + ["center"] * n_data_cols,
+            height=40,
+            line_color=line_color,
+        ),
+        cells=dict(
+            values=cell_values,
+            fill_color=cell_fills,
+            font=dict(color=cell_fonts, size=12, family="JetBrains Mono"),
+            align=["left"] + ["center"] * n_data_cols,
+            height=30,
+            line_color=line_color,
+        ),
     )])
-    fig.update_layout(title=dict(text="📊 Crime Breakdown — Non-Hospital vs Hospital",font=dict(size=15,color=title_color,family="DM Sans")),
-        paper_bgcolor=bg_color,plot_bgcolor=bg_color,margin=dict(l=10,r=10,t=50,b=10),height=max(350,50+36+n_rows*30+20))
+    fig.update_layout(
+        title=dict(text="📊 Crime Breakdown — 🏘️ Non-Hospital vs 🏥 Hospital",
+                   font=dict(size=15, color=title_color, family="DM Sans")),
+        paper_bgcolor=bg_color, plot_bgcolor=bg_color,
+        margin=dict(l=10, r=10, t=50, b=10),
+        height=max(300, 50 + 40 + n_rows * 30 + 20),
+    )
     return fig
 
 def _build_standalone_pivot(data, months_active, is_hospital):
@@ -428,17 +497,27 @@ if page == "📊 Dashboard":
 
     # ── Combined summary table ──
     st.markdown('<div class="section-hdr">📊 Crime Summary — Non-Hospital &amp; Hospital Breakdown</div>', unsafe_allow_html=True)
-    combined_rows, combined_cols = _build_combined_table(data, months_active)
-    fig_combined = _render_combined_table(combined_rows, combined_cols, months_active)
+    piv_nh_c, piv_h_c, all_types_c = _build_combined_table(data, months_active)
+    fig_combined = _render_combined_table(piv_nh_c, piv_h_c, all_types_c, months_active)
     st.plotly_chart(fig_combined, use_container_width=True)
     dc1,dc2 = st.columns(2)
     with dc1: _dl_png(fig_combined, "combined_table")
     with dc2:
+        # CSV export with paired columns
+        period_keys = list(months_active) + ["Total"]
         csv_rows = []
-        for r in combined_rows:
-            rd = {"Crime Type": r["label"].replace("<b>","").replace("</b>","")}
-            for ci,cn in enumerate(combined_cols): rd[cn]=r["vals"][ci]
-            rd["Row Type"]=r["type"]; csv_rows.append(rd)
+        for ct in all_types_c:
+            row = {"Crime Type": ct}
+            for pk in period_keys:
+                row[f"{pk} NH"] = int(piv_nh_c.loc[ct, pk]) if ct in piv_nh_c.index and pk in piv_nh_c.columns else 0
+                row[f"{pk} Hosp"] = int(piv_h_c.loc[ct, pk]) if ct in piv_h_c.index and pk in piv_h_c.columns else 0
+            csv_rows.append(row)
+        # Sub-totals row
+        tot_row = {"Crime Type": "Sub-Totals"}
+        for pk in period_keys:
+            tot_row[f"{pk} NH"] = int(piv_nh_c[pk].sum()) if pk in piv_nh_c.columns else 0
+            tot_row[f"{pk} Hosp"] = int(piv_h_c[pk].sum()) if pk in piv_h_c.columns else 0
+        csv_rows.append(tot_row)
         _dl_csv(pd.DataFrame(csv_rows), "combined_table")
 
     # ── Standalone tables ──
