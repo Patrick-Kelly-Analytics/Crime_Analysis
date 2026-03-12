@@ -270,17 +270,19 @@ def _render_combined_table(piv_nh, piv_h, all_types, months_active):
     row_labels = list(all_types) + ["Sub-Totals"]
     n_rows = len(row_labels)
 
-    # Build header: Crime Type | Jan 🏘️ | Jan 🏥 | Feb 🏘️ | Feb 🏥 | … | Total 🏘️ | Total 🏥
-    header_vals = ["<b>Crime Type</b>"]
+    # Build header with two-line effect:
+    #   "<b>Jan</b><br>Non-Hospital"  |  "<b>Jan</b><br>Hospital"
+    # The first column just has the label spanning both "rows"
+    header_vals = ["<br><b>Crime Type</b>"]
     for pk in period_keys:
-        header_vals.append(f"<b>{pk}</b> 🏘️")
-        header_vals.append(f"<b>{pk}</b> 🏥")
+        header_vals.append(f"<b>{pk}</b><br>Non-Hospital")
+        header_vals.append(f"<b>{pk}</b><br>Hospital")
     n_data_cols = len(period_keys) * 2
 
     # Column widths
-    col_widths = [180] + [52] * n_data_cols
+    col_widths = [180] + [68] * n_data_cols
 
-    # Header fill colours: alternate blue/red tints for sub-columns
+    # Header fill colours: blue tint for NH, red tint for H
     hdr_fills = [header_fill]
     for _ in period_keys:
         hdr_fills.append("#1e3a5f" if dark else "#1e40af")  # NH blue
@@ -354,7 +356,7 @@ def _render_combined_table(piv_nh, piv_h, all_types, months_active):
             fill_color=[hdr_fills],
             font=dict(color=[hdr_font_colors], size=11, family="DM Sans"),
             align=["left"] + ["center"] * n_data_cols,
-            height=40,
+            height=48,
             line_color=line_color,
         ),
         cells=dict(
