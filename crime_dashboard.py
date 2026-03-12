@@ -219,6 +219,7 @@ def _extract_year(fb):
 # TABLE BUILDERS (shared by both pages)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 def _build_combined_table(data, months_active):
+    """Build nested rows: Crime Type header → 🏘️ Non-Hospital → 🏥 Hospital, with footer totals."""
     def _pivot(is_hosp):
         sub = data[data["is_hospital"] == is_hosp]
         piv = sub.groupby(["Crime Type","Month"], observed=True)["Count"].sum().unstack(fill_value=0)
