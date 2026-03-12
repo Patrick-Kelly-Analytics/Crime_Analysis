@@ -270,17 +270,16 @@ def _render_combined_table(piv_nh, piv_h, all_types, months_active):
     row_labels = list(all_types) + ["Sub-Totals"]
     n_rows = len(row_labels)
 
-    # Build header with two-line effect:
-    #   "<b>Jan</b><br>Non-Hospital"  |  "<b>Jan</b><br>Hospital"
-    # The first column just has the label spanning both "rows"
-    header_vals = ["<br><b>Crime Type</b>"]
+    # Compact headers: month name spans visually via colour grouping,
+    # sub-columns use just emoji icons (legend shown above table)
+    header_vals = ["<b>Crime Type</b>"]
     for pk in period_keys:
-        header_vals.append(f"<b>{pk}</b><br>Non-Hospital")
-        header_vals.append(f"<b>{pk}</b><br>Hospital")
+        header_vals.append(f"<b>{pk}</b> 🏘️")
+        header_vals.append(f"<b>{pk}</b> 🏥")
     n_data_cols = len(period_keys) * 2
 
-    # Column widths
-    col_widths = [180] + [68] * n_data_cols
+    # Column widths — tight but readable
+    col_widths = [170] + [56] * n_data_cols
 
     # Header fill colours: blue tint for NH, red tint for H
     hdr_fills = [header_fill]
@@ -356,7 +355,7 @@ def _render_combined_table(piv_nh, piv_h, all_types, months_active):
             fill_color=[hdr_fills],
             font=dict(color=[hdr_font_colors], size=11, family="DM Sans"),
             align=["left"] + ["center"] * n_data_cols,
-            height=48,
+            height=38,
             line_color=line_color,
         ),
         cells=dict(
@@ -499,6 +498,11 @@ if page == "📊 Dashboard":
 
     # ── Combined summary table ──
     st.markdown('<div class="section-hdr">📊 Crime Summary — Non-Hospital &amp; Hospital Breakdown</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.85rem; margin-bottom:8px; opacity:0.8;">'
+        '<span style="background:#1e40af; color:#fff; padding:2px 8px; border-radius:4px; margin-right:6px;">🏘️ Non-Hospital</span>'
+        '<span style="background:#991b1b; color:#fff; padding:2px 8px; border-radius:4px;">🏥 Hospital</span>'
+        '</div>', unsafe_allow_html=True)
     piv_nh_c, piv_h_c, all_types_c = _build_combined_table(data, months_active)
     fig_combined = _render_combined_table(piv_nh_c, piv_h_c, all_types_c, months_active)
     st.plotly_chart(fig_combined, use_container_width=True)
