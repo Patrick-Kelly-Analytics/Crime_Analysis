@@ -410,6 +410,15 @@ most_common    = data.groupby("Crime Type")["Count"].sum().idxmax()
 hosp_pct       = round(total_hospital / max(total_all, 1) * 100, 1)
 most_common_short = most_common.replace(" and Sexual Offences","").replace("& Weapons","").strip()
 
+# Non-hospital specific metrics
+non_hosp_data      = data[~hospital_mask]
+avg_non_hosp_month = round(total_non_hosp / max(n_months, 1), 1)
+most_common_nh     = non_hosp_data.groupby("Crime Type")["Count"].sum().idxmax() if not non_hosp_data.empty else "N/A"
+most_common_nh_short = most_common_nh.replace(" and Sexual Offences","").replace("& Weapons","").strip()
+monthly_non_hosp   = non_hosp_data.groupby("Month", observed=True)["Count"].sum().reindex(months_active).fillna(0)
+high_crime_month_nh = monthly_non_hosp.idxmax() if not monthly_non_hosp.empty else "N/A"
+high_crime_month_nh_val = int(monthly_non_hosp.max()) if not monthly_non_hosp.empty else 0
+
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  PAGE 1: DASHBOARD                                          ║
 # ╚══════════════════════════════════════════════════════════════╝
@@ -417,14 +426,24 @@ if page == "📊 Dashboard":
     st.markdown(f"## 📊 {current_year_label} Crime Dashboard")
 
     # ── KPI row ──
+    # % change vs previous year (only meaningful if prev data loaded)
+    if data_prev is not None:
+        prev_total_kpi = int(data_prev["Count"].sum())
+        pct_change = round((total_all - prev_total_kpi) / max(prev_total_kpi, 1) * 100, 1)
+        pct_change_str = f"{'+' if pct_change > 0 else ''}{pct_change}%"
+        pct_color = "red" if pct_change > 0 else "green"
+    else:
+        pct_change_str = "Upload prev. year"
+        pct_color = "amber"
+
     st.markdown(
         '<div class="kpi-row">'
         + kpi("Total Crimes YTD", total_all, "blue")
-        + kpi("Hospital Crimes", total_hospital, "red")
-        + kpi("Non-Hospital", total_non_hosp, "green")
-        + kpi("Avg / Month", avg_per_month, "amber")
-        + kpi("Most Common Crime", most_common_short, "purple")
-        + kpi("Hospital % of Total", f"{hosp_pct}%", "cyan")
+        + kpi("Non-Hospital Total", total_non_hosp, "green")
+        + kpi("Non-Hospital High Crime Month", f"{high_crime_month_nh} ({high_crime_month_nh_val})", "red")
+        + kpi("Most Common (Non-Hospital)", most_common_nh_short, "purple")
+        + kpi("Avg Non-Hospital / Month", avg_non_hosp_month, "cyan")
+        + kpi("% Change vs Previous Year", pct_change_str, pct_color)
         + '</div>', unsafe_allow_html=True)
 
     # ── Combined summary table ──
@@ -628,7 +647,28 @@ elif page == "📅 Year-on-Year" and data_prev is not None:
                 f'<div class="kpi-value">{curr}</div>'
                 f'<div style="font-size:.75rem;color:#9ca3af;margin-top:4px;">{prev_year_label}: {prev} ({d})</div></div>')
 
-    st.markdown('<div class="kpi-row">'+kpi_yoy("Total Crimes",total_all,prev_total)+kpi_yoy("Hospital",total_hospital,prev_hospital)+kpi_yoy("Non-Hospital",total_non_hosp,prev_non_hosp)+kpi_yoy("Avg/Month",avg_per_month,prev_avg)+'</div>',unsafe_allow_html=True)
+    prev_non_hosp_data   = data_prev[~data_prev["is_hospital"]]
+    prev_avg_nh          = round(prev_non_hosp - 0, 1)  # placeholder; recompute properly
+    prev_avg_nh          = round((prev_total - prev_hospital) / max(prev_n_months, 1), 1)
+    prev_most_common_nh  = prev_non_hosp_data.groupby("Crime Type")["Count"].sum().idxmax() if not prev_non_hosp_data.empty else "N/A"
+    prev_most_common_nh_short = prev_most_common_nh.replace(" and Sexual Offences","").replace("& Weapons","").strip()
+    prev_monthly_nh      = prev_non_hosp_data.groupby("Month", observed=True)["Count"].sum().reindex(months_active_prev).fillna(0)
+    prev_high_month_nh   = prev_monthly_nh.idxmax() if not prev_monthly_nh.empty else "N/A"
+    prev_high_val_nh     = int(prev_monthly_nh.max()) if not prev_monthly_nh.empty else 0
+
+    pct_change_total = round((total_all - prev_total) / max(prev_total, 1) * 100, 1)
+    pct_str = f"{'+' if pct_change_total > 0 else ''}{pct_change_total}%"
+    pct_col = "red" if pct_change_total > 0 else "green"
+
+    st.markdown(
+        '<div class="kpi-row">'
+        + kpi_yoy("Total Crimes YTD", total_all, prev_total)
+        + kpi_yoy("Non-Hospital Total", total_non_hosp, prev_non_hosp)
+        + kpi(f"Non-Hospital High Crime Month", f"{high_crime_month_nh} ({high_crime_month_nh_val})<br><small style='color:#9ca3af'>{prev_year_label}: {prev_high_month_nh} ({prev_high_val_nh})</small>", "red")
+        + kpi(f"Most Common (Non-Hospital)", f"{most_common_nh_short}<br><small style='color:#9ca3af'>{prev_year_label}: {prev_most_common_nh_short}</small>", "purple")
+        + kpi_yoy("Avg Non-Hospital / Month", avg_non_hosp_month, prev_avg_nh)
+        + kpi("% Change vs Previous Year", pct_str, pct_col)
+        + '</div>', unsafe_allow_html=True)
 
     # ── Monthly overlay ──
     st.markdown('<div class="section-hdr">📈 Monthly Trend — Year-on-Year</div>', unsafe_allow_html=True)
