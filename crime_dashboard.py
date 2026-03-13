@@ -150,60 +150,62 @@ def kpi(label, value, color=""):
     return f'<div class="{cls}"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>'
 
 def kpi_card_png(label, value, color=""):
-    """Render a KPI card as a PNG bytes object using Pillow."""
-    W, H = 400, 200
-    PADDING = 28
-    RADIUS = 16
+    """Render a KPI card as a PNG: white background, coloured accent bar + value text."""
+    W, H        = 520, 220
+    RADIUS      = 18
+    BORDER      = 3
+    ACCENT_BAR_H = 6
 
-    # Colour palette matching the CSS classes
-    colour_map = {
-        "blue":   ("#2563eb", "#e8f0fe", "#c7d8fc"),
-        "red":    ("#dc2626", "#fef2f2", "#fecaca"),
-        "green":  ("#16a34a", "#f0fdf4", "#bbf7d0"),
-        "amber":  ("#d97706", "#fffbeb", "#fde68a"),
-        "purple": ("#7c3aed", "#f5f3ff", "#ddd6fe"),
-        "cyan":   ("#0891b2", "#ecfeff", "#a5f3fc"),
+    accent_map = {
+        "blue":   "#2563eb",
+        "red":    "#dc2626",
+        "green":  "#16a34a",
+        "amber":  "#d97706",
+        "purple": "#7c3aed",
+        "cyan":   "#0891b2",
     }
-    val_color, bg_top, bg_bot = colour_map.get(color, ("#1f2937", "#f4f6f8", "#edf0f4"))
+    accent      = accent_map.get(color, "#6b7280")
     label_color = "#6b7280"
-    border_color = colour_map.get(color, (None, None, "#d1d5db"))[2]
+    bg_color    = (255, 255, 255)
+    border_rgb  = tuple(int(accent[i:i+2], 16) for i in (1, 3, 5))
 
-    img = Image.new("RGB", (W, H), (255, 255, 255))
+    img  = Image.new("RGB", (W, H), bg_color)
     draw = ImageDraw.Draw(img)
 
-    # Gradient background via horizontal bands
-    for y in range(H):
-        t = y / H
-        r = int(int(bg_top[1:3], 16) * (1 - t) + int(bg_bot[1:3], 16) * t)
-        g = int(int(bg_top[3:5], 16) * (1 - t) + int(bg_bot[3:5], 16) * t)
-        b = int(int(bg_top[5:7], 16) * (1 - t) + int(bg_bot[5:7], 16) * t)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
-
-    # Rounded border
+    # White rounded card
     draw.rounded_rectangle([0, 0, W - 1, H - 1], radius=RADIUS,
-                            outline=border_color, width=2)
+                            fill=bg_color, outline=border_rgb, width=BORDER)
+
+    # Coloured accent bar at top
+    draw.rounded_rectangle([0, 0, W - 1, ACCENT_BAR_H + RADIUS],
+                            radius=RADIUS, fill=border_rgb)
+    draw.rectangle([0, ACCENT_BAR_H, W - 1, ACCENT_BAR_H + RADIUS], fill=bg_color)
+    draw.rectangle([BORDER, ACCENT_BAR_H, W - 1 - BORDER, ACCENT_BAR_H + RADIUS], fill=bg_color)
 
     # Fonts
     try:
-        font_label = ImageFont.truetype("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 18)
-        font_value = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 42)
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 22)
+        font_value = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 58)
     except Exception:
         font_label = ImageFont.load_default()
         font_value = font_label
 
-    # Label (uppercase, centred)
+    # Label
     lbl_text = label.upper()
     lbl_bbox = draw.textbbox((0, 0), lbl_text, font=font_label)
-    lbl_w = lbl_bbox[2] - lbl_bbox[0]
-    draw.text(((W - lbl_w) / 2, PADDING), lbl_text, font=font_label, fill=label_color)
+    lbl_w    = lbl_bbox[2] - lbl_bbox[0]
+    lbl_y    = ACCENT_BAR_H + 18
+    draw.text(((W - lbl_w) / 2, lbl_y), lbl_text, font=font_label, fill=label_color)
 
-    # Value (centred, coloured)
-    val_text = str(value)
-    val_bbox = draw.textbbox((0, 0), val_text, font=font_value)
-    val_w = val_bbox[2] - val_bbox[0]
-    val_h = val_bbox[3] - val_bbox[1]
-    draw.text(((W - val_w) / 2, (H - val_h) / 2 + 14), val_text,
-              font=font_value, fill=val_color)
+    # Value
+    val_text     = str(value)
+    val_bbox     = draw.textbbox((0, 0), val_text, font=font_value)
+    val_w        = val_bbox[2] - val_bbox[0]
+    val_h        = val_bbox[3] - val_bbox[1]
+    label_bottom = lbl_y + (lbl_bbox[3] - lbl_bbox[1]) + 8
+    remaining    = H - label_bottom
+    val_y        = label_bottom + (remaining - val_h) / 2 - 4
+    draw.text(((W - val_w) / 2, val_y), val_text, font=font_value, fill=border_rgb)
 
     buf = BytesIO()
     img.save(buf, format="PNG", dpi=(144, 144))
