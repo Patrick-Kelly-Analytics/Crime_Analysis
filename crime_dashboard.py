@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import numpy as np
 import re
 from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CONFIG
@@ -147,6 +148,80 @@ def _dl_csv(df, key):
 def kpi(label, value, color=""):
     cls = f"kpi-card kpi-{color}" if color else "kpi-card"
     return f'<div class="{cls}"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>'
+
+def kpi_card_png(label, value, color=""):
+    """Render a KPI card as a PNG bytes object using Pillow."""
+    W, H = 400, 200
+    PADDING = 28
+    RADIUS = 16
+
+    # Colour palette matching the CSS classes
+    colour_map = {
+        "blue":   ("#2563eb", "#e8f0fe", "#c7d8fc"),
+        "red":    ("#dc2626", "#fef2f2", "#fecaca"),
+        "green":  ("#16a34a", "#f0fdf4", "#bbf7d0"),
+        "amber":  ("#d97706", "#fffbeb", "#fde68a"),
+        "purple": ("#7c3aed", "#f5f3ff", "#ddd6fe"),
+        "cyan":   ("#0891b2", "#ecfeff", "#a5f3fc"),
+    }
+    val_color, bg_top, bg_bot = colour_map.get(color, ("#1f2937", "#f4f6f8", "#edf0f4"))
+    label_color = "#6b7280"
+    border_color = colour_map.get(color, (None, None, "#d1d5db"))[2]
+
+    img = Image.new("RGB", (W, H), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    # Gradient background via horizontal bands
+    for y in range(H):
+        t = y / H
+        r = int(int(bg_top[1:3], 16) * (1 - t) + int(bg_bot[1:3], 16) * t)
+        g = int(int(bg_top[3:5], 16) * (1 - t) + int(bg_bot[3:5], 16) * t)
+        b = int(int(bg_top[5:7], 16) * (1 - t) + int(bg_bot[5:7], 16) * t)
+        draw.line([(0, y), (W, y)], fill=(r, g, b))
+
+    # Rounded border
+    draw.rounded_rectangle([0, 0, W - 1, H - 1], radius=RADIUS,
+                            outline=border_color, width=2)
+
+    # Fonts
+    try:
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 18)
+        font_value = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 42)
+    except Exception:
+        font_label = ImageFont.load_default()
+        font_value = font_label
+
+    # Label (uppercase, centred)
+    lbl_text = label.upper()
+    lbl_bbox = draw.textbbox((0, 0), lbl_text, font=font_label)
+    lbl_w = lbl_bbox[2] - lbl_bbox[0]
+    draw.text(((W - lbl_w) / 2, PADDING), lbl_text, font=font_label, fill=label_color)
+
+    # Value (centred, coloured)
+    val_text = str(value)
+    val_bbox = draw.textbbox((0, 0), val_text, font=font_value)
+    val_w = val_bbox[2] - val_bbox[0]
+    val_h = val_bbox[3] - val_bbox[1]
+    draw.text(((W - val_w) / 2, (H - val_h) / 2 + 14), val_text,
+              font=font_value, fill=val_color)
+
+    buf = BytesIO()
+    img.save(buf, format="PNG", dpi=(144, 144))
+    return buf.getvalue()
+
+
+def _dl_kpi_png(label, value, color=""):
+    """Render a download button for a single KPI card PNG."""
+    png = kpi_card_png(label, value, color)
+    safe = label.lower().replace(" ", "_").replace("/", "_").replace("%", "pct")
+    st.download_button(
+        label="⬇ PNG",
+        data=png,
+        file_name=f"kpi_{safe}.png",
+        mime="image/png",
+        key=f"kpi_dl_{safe}_{str(value)[:8]}",
+    )
+
 
 def _lerp_hex(c1, c2, t_val):
     r1,g1,b1 = int(c1[1:3],16),int(c1[3:5],16),int(c1[5:7],16)
@@ -436,15 +511,25 @@ if page == "📊 Dashboard":
         pct_change_str = "Upload prev. year"
         pct_color = "amber"
 
+    kpi_cards = [
+        ("Total Crimes YTD",             total_all,               "blue"),
+        ("Non-Hospital Total",            total_non_hosp,          "green"),
+        ("Non-Hospital High Crime Month", f"{high_crime_month_nh} ({high_crime_month_nh_val})", "red"),
+        ("Most Common (Non-Hospital)",    most_common_nh_short,    "purple"),
+        ("Avg Non-Hospital / Month",      avg_non_hosp_month,      "cyan"),
+        ("% Change vs Previous Year",     pct_change_str,          pct_color),
+    ]
+
     st.markdown(
-        '<div class="kpi-row">'
-        + kpi("Total Crimes YTD", total_all, "blue")
-        + kpi("Non-Hospital Total", total_non_hosp, "green")
-        + kpi("Non-Hospital High Crime Month", f"{high_crime_month_nh} ({high_crime_month_nh_val})", "red")
-        + kpi("Most Common (Non-Hospital)", most_common_nh_short, "purple")
-        + kpi("Avg Non-Hospital / Month", avg_non_hosp_month, "cyan")
-        + kpi("% Change vs Previous Year", pct_change_str, pct_color)
-        + '</div>', unsafe_allow_html=True)
+        '<div class="kpi-row">' +
+        "".join(kpi(lbl, val, col) for lbl, val, col in kpi_cards) +
+        '</div>', unsafe_allow_html=True)
+
+    # Per-card download buttons — one column per card
+    dl_cols = st.columns(len(kpi_cards))
+    for col, (lbl, val, clr) in zip(dl_cols, kpi_cards):
+        with col:
+            _dl_kpi_png(lbl, val, clr)
 
     # ── Combined summary table ──
     st.markdown('<div class="section-hdr">📊 Crime Summary — Non-Hospital &amp; Hospital Breakdown</div>', unsafe_allow_html=True)
