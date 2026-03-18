@@ -427,12 +427,12 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     draw.rectangle([ox,oy,ox+TW-PAD*2,oy+KEY_H], outline=_r(PC["border"]))
     SWATCH=14; sy=oy+(KEY_H-SWATCH)//2; sx=ox+PAD
     draw.rounded_rectangle([sx,sy,sx+SWATCH,sy+SWATCH], radius=3, fill=_r(PC["nh_hdr_bg"]))
-    nh_label="NH = Non-Hospital (excl. Worthing Hospital Road)"
+    nh_label="NH = Non-Hospital"
     bb=draw.textbbox((0,0),nh_label,font=fnt_key)
     draw.text((sx+SWATCH+6,oy+(KEY_H-(bb[3]-bb[1]))//2), nh_label, font=fnt_key, fill=_r("#334155"))
     sx2=sx+SWATCH+6+(bb[2]-bb[0])+24
     draw.rounded_rectangle([sx2,sy,sx2+SWATCH,sy+SWATCH], radius=3, fill=_r(PC["h_hdr_bg"]))
-    h_label="H = Hospital (Worthing Hospital Road only)"
+    h_label="H = Hospital"
     bb2=draw.textbbox((0,0),h_label,font=fnt_key)
     draw.text((sx2+SWATCH+6,oy+(KEY_H-(bb2[3]-bb2[1]))//2), h_label, font=fnt_key, fill=_r("#334155"))
     oy += KEY_H + 4
