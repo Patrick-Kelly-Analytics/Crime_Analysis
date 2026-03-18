@@ -285,8 +285,7 @@ def _tbl_cell(draw, x, y, w, h, bg, fg, font, text="", multiline=False):
         draw.text((x+(w-tw)//2, y+(h-th)//2), text, font=font, fill=fg_c)
 
 def build_rotated_table_png(data, months_active, crime_types_present):
-    """Pillow-rendered rotated table: months as rows, crime types as merged column headers.
-    Polished styling: subtle heat colours, accent stripe, title banner, footer note."""
+    """Pillow-rendered rotated table: months as rows, crime types as merged column headers."""
 
     _CT_LABELS = {
         "Violent Crime and Sexual Offences": "Violent\nCrime",
@@ -302,12 +301,26 @@ def build_rotated_table_png(data, months_active, crime_types_present):
         "Robbery":                           "Robbery",
     }
 
+    _CT_ACCENTS = {
+        "Violent Crime and Sexual Offences": "#dc2626",
+        "Criminal Damage & Arson":           "#ea580c",
+        "Public Disorder & Weapons":         "#d97706",
+        "ASB":                               "#7c3aed",
+        "Vehicle Crime":                     "#0891b2",
+        "Burglary":                          "#2563eb",
+        "Shop-lifting":                      "#db2777",
+        "Other Theft":                       "#059669",
+        "Drugs":                             "#65a30d",
+        "Other Crime":                       "#475569",
+        "Robbery":                           "#9333ea",
+    }
+
     PC = dict(
-        canvas="#f8fafc", border="#e2e8f0",
-        title_bg="#1e293b", title_fg="#ffffff",
-        hdr_bg="#334155",   hdr_fg="#f1f5f9",
-        nh_hdr_bg="#3b82f6", nh_hdr_fg="#ffffff",
-        h_hdr_bg="#ef4444",  h_hdr_fg="#ffffff",
+        canvas="#f8fafc",    border="#e2e8f0",
+        title_bg="#1e293b",  title_fg="#ffffff",
+        hdr_bg="#334155",    hdr_fg="#f1f5f9",
+        nh_hdr_bg="#6b9fd4", nh_hdr_fg="#ffffff",
+        h_hdr_bg="#d47a7a",  h_hdr_fg="#ffffff",
         month_bg="#475569",  month_fg="#f1f5f9",
         row_odd="#ffffff",   row_even="#f1f5f9",
         nh_lo="#ffffff",     nh_hi="#dbeafe",
@@ -315,9 +328,9 @@ def build_rotated_table_png(data, months_active, crime_types_present):
         nh_val_hi="#1d4ed8", nh_val_lo="#64748b",
         h_val_hi="#b91c1c",  h_val_lo="#64748b",
         zero_fg="#cbd5e1",
-        tot_nh_bg="#3b82f6", tot_nh_fg="#ffffff",
-        tot_h_bg="#ef4444",  tot_h_fg="#ffffff",
-        tot_all_bg="#1e293b",tot_all_fg="#ffffff",
+        tot_nh_bg="#7aafd4", tot_nh_fg="#ffffff",
+        tot_h_bg="#d48080",  tot_h_fg="#ffffff",
+        tot_all_bg="#334155",tot_all_fg="#f1f5f9",
     )
 
     def _r(h): h=h.lstrip("#"); return tuple(int(h[i:i+2],16) for i in (0,2,4))
@@ -328,12 +341,12 @@ def build_rotated_table_png(data, months_active, crime_types_present):
         try: return ImageFont.truetype(p,s)
         except: return ImageFont.load_default()
 
-    TITLE_H=46; ROW_H=36; HDR1_H=50; HDR2_H=28
-    MCW=54; SCW=44; TCW=46; PAD=14; FOOTER_H=28
+    TITLE_H=46; ROW_H=36; HDR1_H=52; HDR2_H=26
+    ACCENT_H=4; MCW=54; SCW=50; TCW=50; PAD=14; FOOTER_H=26
 
     fnt_title = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   15)
     fnt_hdr   = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   11)
-    fnt_sub   = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 11)
+    fnt_sub   = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   11)
     fnt_month = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   12)
     fnt_val   = _lf("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",       12)
     fnt_tot   = _lf("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",  13)
@@ -369,12 +382,10 @@ def build_rotated_table_png(data, months_active, crime_types_present):
             h_p[ct][m] =int(ms[ms["is_hospital"]]["Count"].sum())
 
     TW = PAD*2 + MCW + n_ct*2*SCW + 3*TCW
-    TH = PAD*2 + TITLE_H + HDR1_H + HDR2_H + n_m*ROW_H + ROW_H + FOOTER_H
+    TH = PAD*2 + TITLE_H + ACCENT_H + HDR1_H + HDR2_H + n_m*ROW_H + ROW_H + FOOTER_H
 
     img  = Image.new("RGB", (TW, TH), _r(PC["canvas"]))
     draw = ImageDraw.Draw(img)
-
-    # Outer card
     draw.rounded_rectangle([0,0,TW-1,TH-1], radius=14,
                             fill=_r(PC["canvas"]), outline=_r(PC["border"]), width=2)
 
@@ -382,45 +393,51 @@ def build_rotated_table_png(data, months_active, crime_types_present):
 
     # Title banner
     draw.rounded_rectangle([ox,oy,ox+TW-PAD*2,oy+TITLE_H], radius=8, fill=_r(PC["title_bg"]))
-    draw.rectangle([ox,oy,ox+4,oy+TITLE_H], fill=_r(PC["nh_hdr_bg"]))  # blue left accent
+    draw.rectangle([ox,oy,ox+4,oy+TITLE_H], fill=_r(PC["nh_hdr_bg"]))
     title = "Crime Breakdown  —  Months x Crime Type  |  Non-Hospital vs Hospital"
     bb=draw.textbbox((0,0),title,font=fnt_title); th=bb[3]-bb[1]
     draw.text((ox+16, oy+(TITLE_H-th)//2), title, font=fnt_title, fill=_r(PC["title_fg"]))
     oy += TITLE_H + 4
 
-    # Corner header
+    # Accent stripe
+    _cell(draw, ox, oy, MCW, ACCENT_H, PC["hdr_bg"], PC["hdr_fg"], fnt_month)
+    x = ox+MCW
+    for ct in crime_types_present:
+        draw.rectangle([x,oy,x+SCW*2,oy+ACCENT_H], fill=_r(_CT_ACCENTS.get(ct,"#64748b")))
+        x+=SCW*2
+    draw.rectangle([x,oy,x+TCW*3,oy+ACCENT_H], fill=_r(PC["hdr_bg"]))
+    oy += ACCENT_H
+
+    # Corner
     _cell(draw, ox, oy, MCW, HDR1_H+HDR2_H, PC["hdr_bg"], PC["hdr_fg"], fnt_month, "Month")
 
     # Crime type merged headers
-    x = ox + MCW
+    x = ox+MCW
     for ct in crime_types_present:
         label = _CT_LABELS.get(ct, ct)
         _cell(draw, x, oy, SCW*2, HDR1_H, PC["hdr_bg"], PC["hdr_fg"], fnt_hdr, label, ml=True)
-        draw.rectangle([x+1, oy+HDR1_H-3, x+SCW*2-1, oy+HDR1_H], fill=_r(PC["nh_hdr_bg"]))
-        _cell(draw, x,     oy+HDR1_H, SCW, HDR2_H, PC["nh_hdr_bg"], PC["nh_hdr_fg"], fnt_sub, "Non-Hosp")
-        _cell(draw, x+SCW, oy+HDR1_H, SCW, HDR2_H, PC["h_hdr_bg"],  PC["h_hdr_fg"],  fnt_sub, "Hospital")
+        _cell(draw, x,     oy+HDR1_H, SCW, HDR2_H, PC["nh_hdr_bg"], PC["nh_hdr_fg"], fnt_sub, "NH")
+        _cell(draw, x+SCW, oy+HDR1_H, SCW, HDR2_H, PC["h_hdr_bg"],  PC["h_hdr_fg"],  fnt_sub, "H")
         x += SCW*2
 
     # Total headers
-    _cell(draw, x,        oy,          TCW*3, HDR1_H,  PC["hdr_bg"],    PC["hdr_fg"],    fnt_hdr, "TOTAL")
-    _cell(draw, x,        oy+HDR1_H,   TCW,   HDR2_H,  PC["nh_hdr_bg"], PC["nh_hdr_fg"], fnt_sub, "NH")
-    _cell(draw, x+TCW,    oy+HDR1_H,   TCW,   HDR2_H,  PC["h_hdr_bg"],  PC["h_hdr_fg"],  fnt_sub, "H")
-    _cell(draw, x+TCW*2,  oy+HDR1_H,   TCW,   HDR2_H,  PC["hdr_bg"],    PC["hdr_fg"],    fnt_sub, "All")
-
+    _cell(draw, x,        oy,         TCW*3, HDR1_H, PC["hdr_bg"],    PC["hdr_fg"],    fnt_hdr, "TOTAL")
+    _cell(draw, x,        oy+HDR1_H,  TCW,   HDR2_H, PC["nh_hdr_bg"], PC["nh_hdr_fg"], fnt_sub, "NH")
+    _cell(draw, x+TCW,    oy+HDR1_H,  TCW,   HDR2_H, PC["h_hdr_bg"],  PC["h_hdr_fg"],  fnt_sub, "H")
+    _cell(draw, x+TCW*2,  oy+HDR1_H,  TCW,   HDR2_H, PC["hdr_bg"],    PC["hdr_fg"],    fnt_sub, "All")
     oy += HDR1_H + HDR2_H
 
-    nh_max = max((nh_p[ct][m] for ct in crime_types_present for m in months_active), default=1) or 1
-    h_max  = max((h_p[ct][m]  for ct in crime_types_present for m in months_active), default=1) or 1
+    nh_max=max((nh_p[ct][m] for ct in crime_types_present for m in months_active),default=1) or 1
+    h_max =max((h_p[ct][m]  for ct in crime_types_present for m in months_active),default=1) or 1
 
     # Data rows
     for ri, month in enumerate(months_active):
         y   = oy + ri*ROW_H
         rbg = PC["row_odd"] if ri%2==0 else PC["row_even"]
         _cell(draw, ox, y, MCW, ROW_H, PC["month_bg"], PC["month_fg"], fnt_month, month)
-        x = ox + MCW; rnh=0; rh=0
+        x = ox+MCW; rnh=0; rh=0
         for ct in crime_types_present:
-            nh=nh_p[ct][month]; h=h_p[ct][month]
-            rnh+=nh; rh+=h
+            nh=nh_p[ct][month]; h=h_p[ct][month]; rnh+=nh; rh+=h
             if nh==0:
                 _cell(draw, x, y, SCW, ROW_H, rbg, PC["zero_fg"], fnt_val, "–")
             else:
@@ -445,8 +462,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     _cell(draw, ox, y, MCW, ROW_H, PC["tot_all_bg"], PC["tot_all_fg"], fnt_tot, "TOTAL")
     x = ox+MCW; gnh=0; gh=0
     for ct in crime_types_present:
-        nt=sum(nh_p[ct].values()); ht=sum(h_p[ct].values())
-        gnh+=nt; gh+=ht
+        nt=sum(nh_p[ct].values()); ht=sum(h_p[ct].values()); gnh+=nt; gh+=ht
         _cell(draw, x,     y, SCW, ROW_H, PC["tot_nh_bg"], PC["tot_nh_fg"], fnt_tot, str(nt))
         _cell(draw, x+SCW, y, SCW, ROW_H, PC["tot_h_bg"],  PC["tot_h_fg"],  fnt_tot, str(ht))
         x += SCW*2
@@ -454,9 +470,9 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     _cell(draw, x+TCW,   y, TCW, ROW_H, PC["tot_h_bg"],   PC["tot_h_fg"],   fnt_tot, str(gh))
     _cell(draw, x+TCW*2, y, TCW, ROW_H, PC["tot_all_bg"], PC["tot_all_fg"], fnt_tot, str(gnh+gh))
 
-    # Footer note
+    # Footer
     fy = TH - PAD - FOOTER_H + 4
-    foot = "Non-Hospital: all roads excluding Worthing Hospital Road.  Hospital: Worthing Hospital Road only."
+    foot = "Non-Hospital: all roads excluding Worthing Hospital Road.   Hospital: Worthing Hospital Road only."
     bb=draw.textbbox((0,0),foot,font=fnt_foot); th=bb[3]-bb[1]
     draw.text((PAD+MCW, fy+(FOOTER_H-th)//2), foot, font=fnt_foot, fill=_r(PC["hdr_bg"]))
 
