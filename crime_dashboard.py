@@ -6,6 +6,7 @@ import numpy as np
 import re
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
+import zipfile
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # CONFIG
@@ -150,11 +151,11 @@ def kpi(label, value, color=""):
     return f'<div class="{cls}"><div class="kpi-label">{label}</div><div class="kpi-value">{value}</div></div>'
 
 def kpi_card_png(label, value, color=""):
-    """Render a KPI card as a PNG: white background, coloured accent bar + value text."""
-    W, H        = 520, 220
-    RADIUS      = 18
-    BORDER      = 3
-    ACCENT_BAR_H = 6
+    """Render a KPI card as a large, bold PNG: white background, coloured accent bar + value text."""
+    W, H         = 600, 280
+    RADIUS       = 20
+    BORDER       = 3
+    ACCENT_BAR_H = 8
 
     accent_map = {
         "blue":   "#2563eb",
@@ -164,48 +165,69 @@ def kpi_card_png(label, value, color=""):
         "purple": "#7c3aed",
         "cyan":   "#0891b2",
     }
-    accent      = accent_map.get(color, "#6b7280")
-    label_color = "#6b7280"
+    accent     = accent_map.get(color, "#6b7280")
+    label_color = (107, 114, 128)
     bg_color    = (255, 255, 255)
     border_rgb  = tuple(int(accent[i:i+2], 16) for i in (1, 3, 5))
 
     img  = Image.new("RGB", (W, H), bg_color)
     draw = ImageDraw.Draw(img)
 
-    # White rounded card
-    draw.rounded_rectangle([0, 0, W - 1, H - 1], radius=RADIUS,
+    # White rounded card with coloured border
+    draw.rounded_rectangle([0, 0, W-1, H-1], radius=RADIUS,
                             fill=bg_color, outline=border_rgb, width=BORDER)
 
-    # Coloured accent bar at top
-    draw.rounded_rectangle([0, 0, W - 1, ACCENT_BAR_H + RADIUS],
-                            radius=RADIUS, fill=border_rgb)
-    draw.rectangle([0, ACCENT_BAR_H, W - 1, ACCENT_BAR_H + RADIUS], fill=bg_color)
-    draw.rectangle([BORDER, ACCENT_BAR_H, W - 1 - BORDER, ACCENT_BAR_H + RADIUS], fill=bg_color)
+    # Thick accent bar at top
+    draw.rounded_rectangle([0, 0, W-1, ACCENT_BAR_H+RADIUS], radius=RADIUS, fill=border_rgb)
+    draw.rectangle([0, ACCENT_BAR_H, W-1, ACCENT_BAR_H+RADIUS], fill=bg_color)
+    draw.rectangle([BORDER, ACCENT_BAR_H, W-1-BORDER, ACCENT_BAR_H+RADIUS], fill=bg_color)
 
     # Fonts
     try:
-        font_label = ImageFont.truetype("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 22)
-        font_value = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 58)
+        font_label = ImageFont.truetype("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 28)
+        font_value = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 88)
     except Exception:
         font_label = ImageFont.load_default()
         font_value = font_label
 
-    # Label
+    # Label — uppercase, wrap to two lines if too wide
     lbl_text = label.upper()
-    lbl_bbox = draw.textbbox((0, 0), lbl_text, font=font_label)
-    lbl_w    = lbl_bbox[2] - lbl_bbox[0]
-    lbl_y    = ACCENT_BAR_H + 18
-    draw.text(((W - lbl_w) / 2, lbl_y), lbl_text, font=font_label, fill=label_color)
+    bb = draw.textbbox((0, 0), lbl_text, font=font_label)
+    if bb[2] - bb[0] > W - 40:
+        words = lbl_text.split()
+        mid   = len(words) // 2
+        lbl_text = " ".join(words[:mid]) + "\n" + " ".join(words[mid:])
 
-    # Value
-    val_text     = str(value)
-    val_bbox     = draw.textbbox((0, 0), val_text, font=font_value)
-    val_w        = val_bbox[2] - val_bbox[0]
-    val_h        = val_bbox[3] - val_bbox[1]
-    label_bottom = lbl_y + (lbl_bbox[3] - lbl_bbox[1]) + 8
-    remaining    = H - label_bottom
-    val_y        = label_bottom + (remaining - val_h) / 2 - 4
-    draw.text(((W - val_w) / 2, val_y), val_text, font=font_value, fill=border_rgb)
+    lbl_y = ACCENT_BAR_H + 18
+    if "\n" in lbl_text:
+        lines = lbl_text.split("\n")
+        bbs   = [draw.textbbox((0, 0), l, font=font_label) for l in lines]
+        ty    = lbl_y
+        for i, ln in enumerate(lines):
+            tw = bbs[i][2] - bbs[i][0]
+            draw.text(((W - tw) // 2, ty), ln, font=font_label, fill=label_color)
+            ty += bbs[i][3] - bbs[i][1] + 4
+        label_bottom = ty
+    else:
+        bb = draw.textbbox((0, 0), lbl_text, font=font_label)
+        draw.text(((W - (bb[2]-bb[0])) // 2, lbl_y), lbl_text, font=font_label, fill=label_color)
+        label_bottom = lbl_y + (bb[3] - bb[1]) + 8
+
+    # Value — very large; scale down if it overflows
+    val_text  = str(value)
+    fnt_v     = font_value
+    bb = draw.textbbox((0, 0), val_text, font=fnt_v)
+    if bb[2] - bb[0] > W - 40:
+        try:
+            fnt_v = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 64)
+        except Exception:
+            pass
+        bb = draw.textbbox((0, 0), val_text, font=fnt_v)
+
+    vw = bb[2] - bb[0]; vh = bb[3] - bb[1]
+    remaining = H - label_bottom
+    vy = label_bottom + (remaining - vh) // 2 - 4
+    draw.text(((W - vw) // 2, vy), val_text, font=fnt_v, fill=border_rgb)
 
     buf = BytesIO()
     img.save(buf, format="PNG", dpi=(144, 144))
@@ -793,16 +815,31 @@ if page == "📊 Dashboard":
         ("% Change vs Previous Year",     pct_change_str,          pct_color),
     ]
 
+    # Two rows of three cards
+    row1, row2 = kpi_cards[:3], kpi_cards[3:]
     st.markdown(
         '<div class="kpi-row">' +
-        "".join(kpi(lbl, val, col) for lbl, val, col in kpi_cards) +
+        "".join(kpi(lbl, val, col) for lbl, val, col in row1) +
+        '</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="kpi-row">' +
+        "".join(kpi(lbl, val, col) for lbl, val, col in row2) +
         '</div>', unsafe_allow_html=True)
 
-    # Per-card download buttons — one column per card
-    dl_cols = st.columns(len(kpi_cards))
-    for col, (lbl, val, clr) in zip(dl_cols, kpi_cards):
-        with col:
-            _dl_kpi_png(lbl, val, clr)
+    # Single zip download button for all 6 KPI cards
+    zip_buf = BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for lbl, val, clr in kpi_cards:
+            png = kpi_card_png(lbl, val, clr)
+            safe = lbl.lower().replace(" ", "_").replace("/", "_").replace("%", "pct")
+            zf.writestr(f"kpi_{safe}.png", png)
+    st.download_button(
+        "⬇ Download All KPI Cards (ZIP)",
+        zip_buf.getvalue(),
+        file_name="kpi_cards.zip",
+        mime="application/zip",
+        key="kpi_zip_dl",
+    )
 
     # ── Combined summary table ──
     st.markdown('<div class="section-hdr">📊 Crime Summary — Non-Hospital &amp; Hospital Breakdown</div>', unsafe_allow_html=True)
