@@ -815,16 +815,20 @@ if page == "📊 Dashboard":
         ("% Change vs Previous Year",     pct_change_str,          pct_color),
     ]
 
-    # Two rows of three cards
-    row1, row2 = kpi_cards[:3], kpi_cards[3:]
-    st.markdown(
-        '<div class="kpi-row">' +
-        "".join(kpi(lbl, val, col) for lbl, val, col in row1) +
-        '</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="kpi-row">' +
-        "".join(kpi(lbl, val, col) for lbl, val, col in row2) +
-        '</div>', unsafe_allow_html=True)
+    # Three columns of 2 cards each
+    col1, col2, col3 = st.columns(3)
+    pairs = [kpi_cards[0:2], kpi_cards[2:4], kpi_cards[4:6]]
+    for col, pair in zip([col1, col2, col3], pairs):
+        with col:
+            st.markdown(
+                "".join(
+                    f'<div class="kpi-card kpi-{clr}" style="margin-bottom:12px">'
+                    f'<div class="kpi-label">{lbl}</div>'
+                    f'<div class="kpi-value">{val}</div></div>'
+                    for lbl, val, clr in pair
+                ),
+                unsafe_allow_html=True,
+            )
 
     # Single zip download button for all 6 KPI cards
     zip_buf = BytesIO()
