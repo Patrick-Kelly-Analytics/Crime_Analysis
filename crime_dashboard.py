@@ -225,6 +225,172 @@ def _dl_kpi_png(label, value, color=""):
     )
 
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ROTATED TABLE — PILLOW PNG RENDERER
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_CT_SHORT = {
+    "Violent Crime and Sexual Offences": "Violent\nCrime",
+    "Criminal Damage & Arson":           "Criminal\nDamage",
+    "Public Disorder & Weapons":         "Public\nDisorder",
+    "ASB":                               "ASB",
+    "Vehicle Crime":                     "Vehicle\nCrime",
+    "Drugs":                             "Drugs",
+    "Other Crime":                       "Other\nCrime",
+    "Other Theft":                       "Other\nTheft",
+    "Burglary":                          "Burglary",
+    "Robbery":                           "Robbery",
+    "Shop-lifting":                      "Shop-\nlifting",
+}
+
+_TC = dict(
+    hdr_bg="#1e293b", hdr_fg="#ffffff",
+    nh_bg="#1e40af",  h_bg="#991b1b", sub_fg="#ffffff",
+    row_odd="#ffffff", row_even="#f8fafc",
+    tot_all_bg="#0f172a", tot_nh_bg="#2563eb", tot_h_bg="#dc2626", tot_fg="#ffffff",
+    nh_hi="#bfdbfe", h_hi="#fecaca",
+    zero_fg="#c9d0d8", label_fg="#1e293b", border="#e2e8f0",
+)
+
+def _h2r(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+def _lerp_c(c1, c2, t):
+    r1,g1,b1=_h2r(c1); r2,g2,b2=_h2r(c2)
+    return (int(r1+(r2-r1)*t), int(g1+(g2-g1)*t), int(b1+(b2-b1)*t))
+
+def _lf(path, size):
+    try: return ImageFont.truetype(path, size)
+    except: return ImageFont.load_default()
+
+def _tbl_cell(draw, x, y, w, h, bg, fg, font, text="", multiline=False):
+    bg_c = _h2r(bg) if isinstance(bg, str) else bg
+    fg_c = _h2r(fg) if isinstance(fg, str) else fg
+    draw.rectangle([x, y, x+w, y+h], fill=bg_c)
+    draw.rectangle([x, y, x+w, y+h], outline=_h2r(_TC["border"]))
+    if not text: return
+    if multiline:
+        lines = text.split("\n")
+        bboxes = [draw.textbbox((0,0), l, font=font) for l in lines]
+        total_th = sum(b[3]-b[1] for b in bboxes) + 2*(len(lines)-1)
+        ty = y + (h - total_th)//2
+        for i, line in enumerate(lines):
+            bb = bboxes[i]; tw=bb[2]-bb[0]; th=bb[3]-bb[1]
+            draw.text((x+(w-tw)//2, ty), line, font=font, fill=fg_c)
+            ty += th + 2
+    else:
+        bb = draw.textbbox((0,0), text, font=font)
+        tw=bb[2]-bb[0]; th=bb[3]-bb[1]
+        draw.text((x+(w-tw)//2, y+(h-th)//2), text, font=font, fill=fg_c)
+
+def build_rotated_table_png(data, months_active, crime_types_present):
+    """Pillow-rendered rotated table: months as rows, crime types as merged column headers."""
+    ROW_H       = 38
+    HEADER1_H   = 52
+    HEADER2_H   = 28
+    MONTH_COL_W = 54
+    SUB_COL_W   = 46
+    TOTAL_COL_W = 46
+
+    # Pivot data
+    nh_piv = {ct: {m: 0 for m in months_active} for ct in crime_types_present}
+    h_piv  = {ct: {m: 0 for m in months_active} for ct in crime_types_present}
+    for ct in crime_types_present:
+        sub = data[data["Crime Type"] == ct]
+        for m in months_active:
+            ms = sub[sub["Month"] == m]
+            nh_piv[ct][m] = int(ms[~ms["is_hospital"]]["Count"].sum())
+            h_piv[ct][m]  = int(ms[ms["is_hospital"]]["Count"].sum())
+
+    n_ct = len(crime_types_present)
+    n_m  = len(months_active)
+    total_w = MONTH_COL_W + n_ct*2*SUB_COL_W + 3*TOTAL_COL_W
+    total_h = HEADER1_H + HEADER2_H + n_m*ROW_H + ROW_H
+
+    img  = Image.new("RGB", (total_w+2, total_h+2), _h2r(_TC["hdr_bg"]))
+    draw = ImageDraw.Draw(img)
+
+    fnt_hdr   = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   11)
+    fnt_sub   = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 11)
+    fnt_month = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   12)
+    fnt_val   = _lf("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",       12)
+    fnt_tot   = _lf("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",  13)
+
+    # Corner
+    _tbl_cell(draw, 0, 0, MONTH_COL_W, HEADER1_H+HEADER2_H,
+              _TC["hdr_bg"], _TC["hdr_fg"], fnt_month, "Month")
+
+    # Crime type merged headers
+    x = MONTH_COL_W
+    for ct in crime_types_present:
+        short = _CT_SHORT.get(ct, ct)
+        _tbl_cell(draw, x, 0, SUB_COL_W*2, HEADER1_H,
+                  _TC["hdr_bg"], _TC["hdr_fg"], fnt_hdr, short, multiline=True)
+        _tbl_cell(draw, x,            HEADER1_H, SUB_COL_W, HEADER2_H,
+                  _TC["nh_bg"], _TC["sub_fg"], fnt_sub, "NH")
+        _tbl_cell(draw, x+SUB_COL_W,  HEADER1_H, SUB_COL_W, HEADER2_H,
+                  _TC["h_bg"],  _TC["sub_fg"], fnt_sub, "H")
+        x += SUB_COL_W*2
+
+    # Grand total header
+    _tbl_cell(draw, x, 0, TOTAL_COL_W*3, HEADER1_H,
+              _TC["hdr_bg"], _TC["hdr_fg"], fnt_hdr, "TOTAL")
+    _tbl_cell(draw, x,                HEADER1_H, TOTAL_COL_W, HEADER2_H,
+              _TC["nh_bg"], _TC["sub_fg"], fnt_sub, "NH")
+    _tbl_cell(draw, x+TOTAL_COL_W,    HEADER1_H, TOTAL_COL_W, HEADER2_H,
+              _TC["h_bg"],  _TC["sub_fg"], fnt_sub, "H")
+    _tbl_cell(draw, x+TOTAL_COL_W*2,  HEADER1_H, TOTAL_COL_W, HEADER2_H,
+              _TC["hdr_bg"], _TC["sub_fg"], fnt_sub, "All")
+
+    nh_max = max((nh_piv[ct][m] for ct in crime_types_present for m in months_active), default=1) or 1
+    h_max  = max((h_piv[ct][m]  for ct in crime_types_present for m in months_active), default=1) or 1
+
+    # Data rows
+    for ri, month in enumerate(months_active):
+        y      = HEADER1_H + HEADER2_H + ri*ROW_H
+        row_bg = _TC["row_odd"] if ri%2==0 else _TC["row_even"]
+        _tbl_cell(draw, 0, y, MONTH_COL_W, ROW_H,
+                  _TC["hdr_bg"], _TC["hdr_fg"], fnt_month, month)
+        x = MONTH_COL_W; row_nh = 0; row_h = 0
+        for ct in crime_types_present:
+            nh = nh_piv[ct][month]; h = h_piv[ct][month]
+            row_nh += nh; row_h += h
+            if nh == 0:
+                _tbl_cell(draw, x, y, SUB_COL_W, ROW_H, row_bg, _TC["zero_fg"], fnt_val, "–")
+            else:
+                _tbl_cell(draw, x, y, SUB_COL_W, ROW_H,
+                          _lerp_c("#ffffff", _TC["nh_hi"], min(nh/nh_max,1)),
+                          _TC["label_fg"], fnt_val, str(nh))
+            if h == 0:
+                _tbl_cell(draw, x+SUB_COL_W, y, SUB_COL_W, ROW_H, row_bg, _TC["zero_fg"], fnt_val, "–")
+            else:
+                _tbl_cell(draw, x+SUB_COL_W, y, SUB_COL_W, ROW_H,
+                          _lerp_c("#ffffff", _TC["h_hi"], min(h/h_max,1)),
+                          _TC["label_fg"], fnt_val, str(h))
+            x += SUB_COL_W*2
+        _tbl_cell(draw, x,               y, TOTAL_COL_W, ROW_H, _TC["tot_nh_bg"], _TC["tot_fg"], fnt_tot, str(row_nh))
+        _tbl_cell(draw, x+TOTAL_COL_W,   y, TOTAL_COL_W, ROW_H, _TC["tot_h_bg"],  _TC["tot_fg"], fnt_tot, str(row_h))
+        _tbl_cell(draw, x+TOTAL_COL_W*2, y, TOTAL_COL_W, ROW_H, _TC["tot_all_bg"],_TC["tot_fg"], fnt_tot, str(row_nh+row_h))
+
+    # Totals row
+    y = HEADER1_H + HEADER2_H + n_m*ROW_H
+    _tbl_cell(draw, 0, y, MONTH_COL_W, ROW_H, _TC["tot_all_bg"], _TC["tot_fg"], fnt_tot, "TOTAL")
+    x = MONTH_COL_W; grand_nh = 0; grand_h = 0
+    for ct in crime_types_present:
+        nh_t = sum(nh_piv[ct].values()); h_t = sum(h_piv[ct].values())
+        grand_nh += nh_t; grand_h += h_t
+        _tbl_cell(draw, x,           y, SUB_COL_W, ROW_H, _TC["tot_nh_bg"], _TC["tot_fg"], fnt_tot, str(nh_t))
+        _tbl_cell(draw, x+SUB_COL_W, y, SUB_COL_W, ROW_H, _TC["tot_h_bg"],  _TC["tot_fg"], fnt_tot, str(h_t))
+        x += SUB_COL_W*2
+    _tbl_cell(draw, x,               y, TOTAL_COL_W, ROW_H, _TC["tot_nh_bg"], _TC["tot_fg"], fnt_tot, str(grand_nh))
+    _tbl_cell(draw, x+TOTAL_COL_W,   y, TOTAL_COL_W, ROW_H, _TC["tot_h_bg"],  _TC["tot_fg"], fnt_tot, str(grand_h))
+    _tbl_cell(draw, x+TOTAL_COL_W*2, y, TOTAL_COL_W, ROW_H, _TC["tot_all_bg"],_TC["tot_fg"], fnt_tot, str(grand_nh+grand_h))
+
+    buf = BytesIO()
+    img.save(buf, format="PNG", dpi=(144, 144))
+    return buf.getvalue()
+
 def _lerp_hex(c1, c2, t_val):
     r1,g1,b1 = int(c1[1:3],16),int(c1[3:5],16),int(c1[5:7],16)
     r2,g2,b2 = int(c2[1:3],16),int(c2[3:5],16),int(c2[5:7],16)
@@ -538,7 +704,7 @@ if page == "📊 Dashboard":
     combined_rows, combined_cols = _build_combined_table(data, months_active)
     fig_combined = _render_combined_table(combined_rows, combined_cols, months_active)
     st.plotly_chart(fig_combined, use_container_width=True)
-    dc1,dc2 = st.columns(2)
+    dc1,dc2,dc3 = st.columns(3)
     with dc1: _dl_png(fig_combined, "combined_table")
     with dc2:
         csv_rows = []
@@ -547,6 +713,20 @@ if page == "📊 Dashboard":
             for ci,cn in enumerate(combined_cols): rd[cn]=r["vals"][ci]
             rd["Row Type"]=r["type"]; csv_rows.append(rd)
         _dl_csv(pd.DataFrame(csv_rows), "combined_table")
+    with dc3:
+        crime_types_present = sorted(
+            data["Crime Type"].unique(),
+            key=lambda ct: data[data["Crime Type"]==ct]["Count"].sum(),
+            reverse=True
+        )
+        rotated_png = build_rotated_table_png(data, months_active, crime_types_present)
+        st.download_button(
+            "⬇ PNG (Rotated Layout)",
+            rotated_png,
+            "combined_table_rotated.png",
+            "image/png",
+            key="dl_rotated_table",
+        )
 
     # ── Standalone tables ──
     st.markdown('<div class="section-hdr">🏘️ Non-Hospital Crimes</div>', unsafe_allow_html=True)
