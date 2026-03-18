@@ -318,19 +318,19 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     PC = dict(
         canvas="#f8fafc",    border="#e2e8f0",
         title_bg="#1e293b",  title_fg="#ffffff",
-        hdr_bg="#334155",    hdr_fg="#f1f5f9",
-        nh_hdr_bg="#6b9fd4", nh_hdr_fg="#ffffff",
-        h_hdr_bg="#d47a7a",  h_hdr_fg="#ffffff",
-        month_bg="#475569",  month_fg="#f1f5f9",
+        hdr_bg="#1e293b",    hdr_fg="#f1f5f9",
+        nh_hdr_bg="#5585b5", nh_hdr_fg="#ffffff",
+        h_hdr_bg="#b85c5c",  h_hdr_fg="#ffffff",
+        month_bg="#334155",  month_fg="#f1f5f9",
         row_odd="#ffffff",   row_even="#f1f5f9",
         nh_lo="#ffffff",     nh_hi="#dbeafe",
         h_lo="#ffffff",      h_hi="#fee2e2",
         nh_val_hi="#1d4ed8", nh_val_lo="#64748b",
         h_val_hi="#b91c1c",  h_val_lo="#64748b",
-        zero_fg="#cbd5e1",
-        tot_nh_bg="#7aafd4", tot_nh_fg="#ffffff",
-        tot_h_bg="#d48080",  tot_h_fg="#ffffff",
-        tot_all_bg="#334155",tot_all_fg="#f1f5f9",
+        zero_fg="#94a3b8",
+        tot_nh_bg="#5585b5", tot_nh_fg="#ffffff",
+        tot_h_bg="#b85c5c",  tot_h_fg="#ffffff",
+        tot_all_bg="#1e293b",tot_all_fg="#f1f5f9",
     )
 
     def _r(h): h=h.lstrip("#"); return tuple(int(h[i:i+2],16) for i in (0,2,4))
@@ -341,7 +341,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
         try: return ImageFont.truetype(p,s)
         except: return ImageFont.load_default()
 
-    TITLE_H=46; ROW_H=36; HDR1_H=52; HDR2_H=26
+    TITLE_H=46; KEY_H=28; ROW_H=36; HDR1_H=52; HDR2_H=26
     ACCENT_H=4; MCW=54; SCW=50; TCW=50; PAD=14; FOOTER_H=26
 
     fnt_title = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   15)
@@ -351,6 +351,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     fnt_val   = _lf("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",       12)
     fnt_tot   = _lf("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",  13)
     fnt_foot  = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Regular.ttf",10)
+    fnt_key   = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Medium.ttf", 11)
 
     def _cell(draw, x, y, w, h, bg, fg, font, text="", ml=False):
         bg_c = _r(bg) if isinstance(bg,str) else bg
@@ -382,7 +383,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
             h_p[ct][m] =int(ms[ms["is_hospital"]]["Count"].sum())
 
     TW = PAD*2 + MCW + n_ct*2*SCW + 3*TCW
-    TH = PAD*2 + TITLE_H + ACCENT_H + HDR1_H + HDR2_H + n_m*ROW_H + ROW_H + FOOTER_H
+    TH = PAD*2 + TITLE_H + KEY_H + ACCENT_H + HDR1_H + HDR2_H + n_m*ROW_H + ROW_H + FOOTER_H
 
     img  = Image.new("RGB", (TW, TH), _r(PC["canvas"]))
     draw = ImageDraw.Draw(img)
@@ -397,7 +398,22 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     title = "Crime Breakdown  —  Months x Crime Type  |  Non-Hospital vs Hospital"
     bb=draw.textbbox((0,0),title,font=fnt_title); th=bb[3]-bb[1]
     draw.text((ox+16, oy+(TITLE_H-th)//2), title, font=fnt_title, fill=_r(PC["title_fg"]))
-    oy += TITLE_H + 4
+    oy += TITLE_H
+
+    # NH / H key bar
+    draw.rectangle([ox,oy,ox+TW-PAD*2,oy+KEY_H], fill=_r("#f1f5f9"))
+    draw.rectangle([ox,oy,ox+TW-PAD*2,oy+KEY_H], outline=_r(PC["border"]))
+    SWATCH=14; sy=oy+(KEY_H-SWATCH)//2; sx=ox+PAD
+    draw.rounded_rectangle([sx,sy,sx+SWATCH,sy+SWATCH], radius=3, fill=_r(PC["nh_hdr_bg"]))
+    nh_label="NH = Non-Hospital (excl. Worthing Hospital Road)"
+    bb=draw.textbbox((0,0),nh_label,font=fnt_key)
+    draw.text((sx+SWATCH+6,oy+(KEY_H-(bb[3]-bb[1]))//2), nh_label, font=fnt_key, fill=_r("#334155"))
+    sx2=sx+SWATCH+6+(bb[2]-bb[0])+24
+    draw.rounded_rectangle([sx2,sy,sx2+SWATCH,sy+SWATCH], radius=3, fill=_r(PC["h_hdr_bg"]))
+    h_label="H = Hospital (Worthing Hospital Road only)"
+    bb2=draw.textbbox((0,0),h_label,font=fnt_key)
+    draw.text((sx2+SWATCH+6,oy+(KEY_H-(bb2[3]-bb2[1]))//2), h_label, font=fnt_key, fill=_r("#334155"))
+    oy += KEY_H + 4
 
     # Accent stripe
     _cell(draw, ox, oy, MCW, ACCENT_H, PC["hdr_bg"], PC["hdr_fg"], fnt_month)
@@ -430,7 +446,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     nh_max=max((nh_p[ct][m] for ct in crime_types_present for m in months_active),default=1) or 1
     h_max =max((h_p[ct][m]  for ct in crime_types_present for m in months_active),default=1) or 1
 
-    # Data rows
+    # Data rows — always show numeric value, 0 in muted colour
     for ri, month in enumerate(months_active):
         y   = oy + ri*ROW_H
         rbg = PC["row_odd"] if ri%2==0 else PC["row_even"]
@@ -439,14 +455,14 @@ def build_rotated_table_png(data, months_active, crime_types_present):
         for ct in crime_types_present:
             nh=nh_p[ct][month]; h=h_p[ct][month]; rnh+=nh; rh+=h
             if nh==0:
-                _cell(draw, x, y, SCW, ROW_H, rbg, PC["zero_fg"], fnt_val, "–")
+                _cell(draw, x, y, SCW, ROW_H, rbg, PC["zero_fg"], fnt_val, "0")
             else:
                 t=min(nh/nh_max,1.0)
                 _cell(draw, x, y, SCW, ROW_H,
                       _lrp(PC["nh_lo"],PC["nh_hi"],t), _lrp(PC["nh_val_lo"],PC["nh_val_hi"],t),
                       fnt_val, str(nh))
             if h==0:
-                _cell(draw, x+SCW, y, SCW, ROW_H, rbg, PC["zero_fg"], fnt_val, "–")
+                _cell(draw, x+SCW, y, SCW, ROW_H, rbg, PC["zero_fg"], fnt_val, "0")
             else:
                 t=min(h/h_max,1.0)
                 _cell(draw, x+SCW, y, SCW, ROW_H,
@@ -472,9 +488,9 @@ def build_rotated_table_png(data, months_active, crime_types_present):
 
     # Footer
     fy = TH - PAD - FOOTER_H + 4
-    foot = "Non-Hospital: all roads excluding Worthing Hospital Road.   Hospital: Worthing Hospital Road only."
+    foot = "Shading intensity indicates relative frequency within each column — darker = higher count."
     bb=draw.textbbox((0,0),foot,font=fnt_foot); th=bb[3]-bb[1]
-    draw.text((PAD+MCW, fy+(FOOTER_H-th)//2), foot, font=fnt_foot, fill=_r(PC["hdr_bg"]))
+    draw.text((PAD+MCW, fy+(FOOTER_H-th)//2), foot, font=fnt_foot, fill=_r(PC["month_bg"]))
 
     buf = BytesIO()
     img.save(buf, format="PNG", dpi=(144, 144))
