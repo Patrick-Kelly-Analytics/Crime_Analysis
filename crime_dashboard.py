@@ -825,6 +825,7 @@ if page == "📊 Dashboard":
             st.markdown(kpi(lbl_a, val_a, clr_a), unsafe_allow_html=True)
         with col_b:
             st.markdown(kpi(lbl_b, val_b, clr_b), unsafe_allow_html=True)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
     # Single zip download button for all 6 KPI cards
     zip_buf = BytesIO()
