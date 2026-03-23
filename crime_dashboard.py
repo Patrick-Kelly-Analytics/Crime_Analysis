@@ -230,7 +230,7 @@ def kpi_card_png(label, value, color=""):
     draw.text(((W - vw) // 2, vy), val_text, font=fnt_v, fill=border_rgb)
 
     buf = BytesIO()
-    img.save(buf, format="PNG", dpi=(144, 144))
+    img.save(buf, format="JPEG", dpi=(144, 144), quality=95)
     return buf.getvalue()
 
 
@@ -363,7 +363,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
         try: return ImageFont.truetype(p,s)
         except: return ImageFont.load_default()
 
-    TITLE_H=46; KEY_H=28; ROW_H=36; HDR1_H=52; HDR2_H=26
+    TITLE_H=46; KEY_H=28; ROW_H=26; HDR1_H=50; HDR2_H=24
     ACCENT_H=4; MCW=54; SCW=50; TCW=50; PAD=14; FOOTER_H=26
 
     fnt_title = _lf("/usr/share/fonts/truetype/google-fonts/Poppins-Bold.ttf",   15)
@@ -515,7 +515,7 @@ def build_rotated_table_png(data, months_active, crime_types_present):
     draw.text((PAD+MCW, fy+(FOOTER_H-th)//2), foot, font=fnt_foot, fill=_r(PC["month_bg"]))
 
     buf = BytesIO()
-    img.save(buf, format="PNG", dpi=(144, 144))
+    img.save(buf, format="JPEG", dpi=(144, 144), quality=95)
     return buf.getvalue()
 
 def _lerp_hex(c1, c2, t_val):
@@ -862,12 +862,12 @@ if page == "📊 Dashboard":
             key=lambda ct: data[data["Crime Type"]==ct]["Count"].sum(),
             reverse=True
         )
-        rotated_png = build_rotated_table_png(data, months_active, crime_types_present)
+        rotated_jpg = build_rotated_table_png(data, months_active, crime_types_present)
         st.download_button(
-            "⬇ PNG (Rotated Layout)",
-            rotated_png,
-            "combined_table_rotated.png",
-            "image/png",
+            "⬇ JPEG (Rotated Layout)",
+            rotated_jpg,
+            "combined_table_rotated.jpg",
+            "image/jpeg",
             key="dl_rotated_table",
         )
 
